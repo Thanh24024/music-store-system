@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import sys
 sys.path.append('..')
-from gui.styles.theme import Theme 
+from gui.styles.theme import Theme
 
 class AdminPanel:
     def __init__(self, root, admin_name="Admin"):

@@ -1,0 +1,22 @@
+# GUI & Graphics
+pillow==10.0.0
+
+# Data Processing
+pandas>=2.2.0
+numpy>=2.0.0
+
+# Visualization
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+
+# Security
+bcrypt==4.0.1
+
+# Utils
+python-dotenv==1.0.0
+
+# Optional: For web API
+flask==2.3.3
+flask-cors==4.0.0
+requests==2.31.0

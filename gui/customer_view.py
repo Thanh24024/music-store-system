@@ -1,58 +1,62 @@
 """
-Customer View - Giao diện khách hàng
+Customer View - Giao diện khách hàng với Database
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
 import sys
-sys.path.append('..')
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from gui.styles.theme import Theme
 from gui.components.product_card import ProductCard
+from database.db_manager import get_db
 
 class CustomerView:
-    def __init__(self, root, username="Customer"):
+    def __init__(self, root, user_data, on_logout=None):
         self.root = root
         self.root.title("Music Store - Khách hàng")
         self.root.geometry("1200x700")
-        self.root.state('zoomed')  # Maximize window
+        self.root.state('zoomed')
         
-        self.username = username
+        self.user_data = user_data
+        self.user_id = user_data['id']
+        self.username = user_data['full_name']
+        self.on_logout = on_logout
+        
+        self.db = get_db()
         self.cart_items = []
-        self.current_category = "Tất cả"
+        self.current_category_id = None
         self.search_query = ""
         
-        # Sample products data
-        self.products = self.get_sample_products()
+        # Load data from database
+        self.categories = self.db.get_all_categories()
+        self.products = self.db.get_all_products()
         self.filtered_products = self.products.copy()
+        
+        # Load cart
+        self.load_cart()
         
         self.root.configure(bg=Theme.BG_SECONDARY)
         self.create_widgets()
         self.load_products()
     
-    def get_sample_products(self):
-        """Dữ liệu sản phẩm mẫu"""
-        return [
-            {'id': 1, 'name': 'Yamaha F310 Acoustic Guitar', 'brand': 'Yamaha', 'price': 3500000, 'stock': 15, 'category': 'Guitar'},
-            {'id': 2, 'name': 'Fender Stratocaster Electric', 'brand': 'Fender', 'price': 12000000, 'stock': 8, 'category': 'Guitar'},
-            {'id': 3, 'name': 'Yamaha P-45 Digital Piano', 'brand': 'Yamaha', 'price': 11000000, 'stock': 5, 'category': 'Piano'},
-            {'id': 4, 'name': 'Roland FP-30X Digital Piano', 'brand': 'Roland', 'price': 15500000, 'stock': 3, 'category': 'Piano'},
-            {'id': 5, 'name': 'Pearl Export Drum Set', 'brand': 'Pearl', 'price': 18000000, 'stock': 2, 'category': 'Drums'},
-            {'id': 6, 'name': 'Yamaha Alto Saxophone', 'brand': 'Yamaha', 'price': 25000000, 'stock': 4, 'category': 'Wind'},
-            {'id': 7, 'name': 'Ibanez Bass Guitar', 'brand': 'Ibanez', 'price': 8500000, 'stock': 10, 'category': 'Guitar'},
-            {'id': 8, 'name': 'Casio CT-S300 Keyboard', 'brand': 'Casio', 'price': 4200000, 'stock': 12, 'category': 'Piano'},
-        ]
+    def load_cart(self):
+        """Load giỏ hàng từ database"""
+        self.cart_items = self.db.get_cart_items(self.user_id)
+        self.update_cart_button()
     
     def create_widgets(self):
         # Header
         self.create_header()
         
-        # Main Content Area
+        # Main Content
         content_frame = tk.Frame(self.root, bg=Theme.BG_SECONDARY)
         content_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Left Sidebar - Categories
+        # Sidebar
         self.create_sidebar(content_frame)
         
-        # Right Content - Products
+        # Content
         self.create_content_area(content_frame)
     
     def create_header(self):
@@ -71,7 +75,7 @@ class CustomerView:
         )
         logo_label.pack(side=tk.LEFT, padx=30)
         
-        # Search Bar
+        # Search
         search_frame = tk.Frame(header, bg=Theme.PRIMARY)
         search_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=20)
         
@@ -100,7 +104,7 @@ class CustomerView:
         )
         search_btn.pack(side=tk.LEFT)
         
-        # Cart Button
+        # Cart
         self.cart_btn = tk.Button(
             header,
             text=f"🛒 Giỏ hàng (0)",
@@ -114,7 +118,7 @@ class CustomerView:
         )
         self.cart_btn.pack(side=tk.RIGHT, padx=10)
         
-        # User Menu
+        # User
         user_frame = tk.Frame(header, bg=Theme.PRIMARY)
         user_frame.pack(side=tk.RIGHT, padx=20)
         
@@ -141,7 +145,7 @@ class CustomerView:
         logout_btn.pack(side=tk.LEFT)
     
     def create_sidebar(self, parent):
-        """Tạo sidebar danh mục"""
+        """Tạo sidebar"""
         sidebar = tk.Frame(parent, bg=Theme.BG_PRIMARY, width=220)
         sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(10, 5), pady=10)
         sidebar.pack_propagate(False)
@@ -156,13 +160,30 @@ class CustomerView:
         )
         title_label.pack(pady=20, padx=15, anchor=tk.W)
         
-        # Categories
-        categories = ["Tất cả", "Guitar", "Piano", "Drums", "Wind", "Accessories"]
+        # All category
+        btn = tk.Button(
+            sidebar,
+            text="Tất cả sản phẩm",
+            font=(Theme.FONT_FAMILY, 11),
+            bg=Theme.BG_PRIMARY,
+            fg=Theme.TEXT_PRIMARY,
+            relief="flat",
+            cursor="hand2",
+            anchor=tk.W,
+            padx=15,
+            pady=10,
+            command=lambda: self.select_category(None, "Tất cả sản phẩm")
+        )
+        btn.pack(fill=tk.X)
+        btn.bind('<Enter>', lambda e, b=btn: b.config(bg=Theme.HOVER))
+        btn.bind('<Leave>', lambda e, b=btn: b.config(bg=Theme.BG_PRIMARY))
         
-        for category in categories:
+        # Categories from database
+        for category in self.categories:
+            cat_text = f"{category.get('icon', '')} {category['name']}"
             btn = tk.Button(
                 sidebar,
-                text=category,
+                text=cat_text,
                 font=(Theme.FONT_FAMILY, 11),
                 bg=Theme.BG_PRIMARY,
                 fg=Theme.TEXT_PRIMARY,
@@ -171,7 +192,7 @@ class CustomerView:
                 anchor=tk.W,
                 padx=15,
                 pady=10,
-                command=lambda c=category: self.select_category(c)
+                command=lambda c=category: self.select_category(c['id'], c['name'])
             )
             btn.pack(fill=tk.X)
             btn.bind('<Enter>', lambda e, b=btn: b.config(bg=Theme.HOVER))
@@ -205,7 +226,7 @@ class CustomerView:
         )
         self.result_label.pack(side=tk.LEFT, pady=15)
         
-        # Sort options
+        # Sort
         sort_frame = tk.Frame(title_frame, bg=Theme.BG_PRIMARY)
         sort_frame.pack(side=tk.RIGHT, padx=20, pady=15)
         
@@ -217,7 +238,7 @@ class CustomerView:
             bg=Theme.BG_PRIMARY
         ).pack(side=tk.LEFT, padx=(0, 10))
         
-        self.sort_var = tk.StringVar(value="default")
+        self.sort_var = tk.StringVar(value="Mặc định")
         sort_combo = ttk.Combobox(
             sort_frame,
             textvariable=self.sort_var,
@@ -229,11 +250,10 @@ class CustomerView:
         sort_combo.pack(side=tk.LEFT)
         sort_combo.bind('<<ComboboxSelected>>', lambda e: self.sort_products())
         
-        # Products container with scrollbar
+        # Products container
         products_container = tk.Frame(content, bg=Theme.BG_SECONDARY)
         products_container.pack(fill=tk.BOTH, expand=True)
         
-        # Canvas and Scrollbar
         canvas = tk.Canvas(products_container, bg=Theme.BG_SECONDARY, highlightthickness=0)
         scrollbar = ttk.Scrollbar(products_container, orient="vertical", command=canvas.yview)
         
@@ -245,26 +265,31 @@ class CustomerView:
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Update scroll region
         self.products_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        
-        # Mouse wheel scrolling
         canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
     
     def load_products(self):
-        """Load sản phẩm vào grid"""
-        # Clear existing products
+        """Load sản phẩm"""
         for widget in self.products_frame.winfo_children():
             widget.destroy()
         
-        # Create grid
         row, col = 0, 0
         max_cols = 4
         
         for product in self.filtered_products:
+            # Format product data
+            product_data = {
+                'id': product['id'],
+                'name': product['name'],
+                'brand': product['brand'],
+                'price': product['price'] * (1 - product['discount_percent'] / 100),
+                'stock': product['stock'],
+                'category': product.get('category_name', '')
+            }
+            
             card = ProductCard(
                 self.products_frame,
-                product,
+                product_data,
                 on_add_to_cart=self.add_to_cart,
                 on_view_detail=self.view_product_detail
             )
@@ -276,23 +301,28 @@ class CustomerView:
                 col = 0
                 row += 1
         
-        # Update result label
         self.result_label.config(text=f"({len(self.filtered_products)} sản phẩm)")
     
-    def select_category(self, category):
+    def select_category(self, category_id, category_name):
         """Chọn danh mục"""
-        self.current_category = category
-        self.category_label.config(text=f"{category}")
+        self.current_category_id = category_id
+        self.category_label.config(text=category_name)
         self.filter_products()
     
     def filter_products(self):
-        """Lọc sản phẩm theo danh mục và tìm kiếm"""
+        """Lọc sản phẩm"""
         search = self.search_var.get().lower()
         
+        # Get products from database
+        if self.current_category_id:
+            all_products = self.db.get_all_products(category_id=self.current_category_id)
+        else:
+            all_products = self.db.get_all_products()
+        
+        # Filter by search
         self.filtered_products = [
-            p for p in self.products
-            if (self.current_category == "Tất cả" or p['category'] == self.current_category)
-            and (search in p['name'].lower() or search in p['brand'].lower())
+            p for p in all_products
+            if search in p['name'].lower() or search in p['brand'].lower()
         ]
         
         self.load_products()
@@ -311,22 +341,20 @@ class CustomerView:
         self.load_products()
     
     def add_to_cart(self, product):
-        """Thêm sản phẩm vào giỏ"""
-        # Check if product already in cart
-        for item in self.cart_items:
-            if item['id'] == product['id']:
-                item['quantity'] += 1
-                messagebox.showinfo("Giỏ hàng", f"Đã thêm 1 {product['name']} vào giỏ!")
-                self.update_cart_button()
-                return
+        """Thêm vào giỏ hàng"""
+        # Check stock
+        if product['stock'] <= 0:
+            messagebox.showwarning("Hết hàng", "Sản phẩm này hiện đã hết hàng!")
+            return
         
-        # Add new item
-        self.cart_items.append({
-            **product,
-            'quantity': 1
-        })
-        messagebox.showinfo("Giỏ hàng", f"Đã thêm {product['name']} vào giỏ!")
-        self.update_cart_button()
+        # Add to database
+        success = self.db.add_to_cart(self.user_id, product['id'], 1)
+        
+        if success:
+            messagebox.showinfo("Thành công", f"Đã thêm {product['name']} vào giỏ hàng!")
+            self.load_cart()
+        else:
+            messagebox.showerror("Lỗi", "Không thể thêm vào giỏ hàng!")
     
     def update_cart_button(self):
         """Cập nhật nút giỏ hàng"""
@@ -339,31 +367,42 @@ class CustomerView:
             messagebox.showinfo("Giỏ hàng", "Giỏ hàng của bạn đang trống!")
             return
         
-        # Create cart window
+        from gui.cart_window import CartWindow
         cart_window = tk.Toplevel(self.root)
-        cart_window.title("Giỏ hàng")
-        cart_window.geometry("600x500")
-        
-        messagebox.showinfo("Giỏ hàng", f"Bạn có {len(self.cart_items)} sản phẩm trong giỏ!")
+        CartWindow(cart_window, self.user_data, on_cart_updated=self.load_cart)
     
     def view_product_detail(self, product):
         """Xem chi tiết sản phẩm"""
-        detail_window = tk.Toplevel(self.root)
-        detail_window.title(product['name'])
-        detail_window.geometry("500x600")
+        # Get full product details
+        full_product = self.db.get_product_by_id(product['id'])
         
-        messagebox.showinfo("Chi tiết", f"Xem chi tiết: {product['name']}")
+        if full_product:
+            messagebox.showinfo("Chi tiết sản phẩm", 
+                f"Tên: {full_product['name']}\n"
+                f"Thương hiệu: {full_product['brand']}\n"
+                f"Giá: {full_product['price']:,.0f} ₫\n"
+                f"Tồn kho: {full_product['stock']}\n"
+                f"Mô tả: {full_product.get('description', 'N/A')}"
+            )
     
     def logout(self):
         """Đăng xuất"""
         if messagebox.askyesno("Đăng xuất", "Bạn có chắc muốn đăng xuất?"):
             self.root.destroy()
-            # TODO: Return to login
+            if self.on_logout:
+                self.on_logout()
 
 def main():
-    root = tk.Tk()
-    app = CustomerView(root, "Nguyễn Văn A")
-    root.mainloop()
+    # Demo
+    db = get_db()
+    user = db.verify_user("customer", "customer123")
+    
+    if user:
+        root = tk.Tk()
+        app = CustomerView(root, user)
+        root.mainloop()
+    else:
+        print("Login failed!")
 
 if __name__ == "__main__":
     main()
