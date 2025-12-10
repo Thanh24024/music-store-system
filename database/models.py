@@ -1,344 +1,260 @@
 """
-Database Models - Định nghĩa cấu trúc bảng
+Database Models - SQLite Schema Definition
 """
-from datetime import datetime
-from typing import Optional, List, Dict
 import sqlite3
+from datetime import datetime
+import os
 
-class BaseModel:
-    """Base model cho tất cả các models"""
+class DatabaseSchema:
+    """Định nghĩa schema cho SQLite database"""
     
     @staticmethod
-    def dict_factory(cursor, row):
-        """Convert tuple to dict"""
-        d = {}
-        for idx, col in enumerate(cursor.description):
-            d[col[0]] = row[idx]
-        return d
-
-class User:
-    """Model User - Người dùng"""
+    def get_schema():
+        """Trả về SQL schema"""
+        return """
+        -- Admin table
+        CREATE TABLE IF NOT EXISTS admin (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(20) NOT NULL,
+            password VARCHAR(50) NOT NULL
+        );
+        
+        -- Users table
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(100) NOT NULL,
+            email VARCHAR(100) NOT NULL UNIQUE,
+            number VARCHAR(10) NOT NULL,
+            password VARCHAR(50) NOT NULL,
+            address VARCHAR(500) NOT NULL DEFAULT '',
+            create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Products table
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(100) NOT NULL,
+            category VARCHAR(100) NOT NULL,
+            price INTEGER NOT NULL,
+            image VARCHAR(100) NOT NULL,
+            quantity INTEGER NOT NULL DEFAULT 0,
+            describe VARCHAR(500) NOT NULL DEFAULT ''
+        );
+        
+        -- Cart table
+        CREATE TABLE IF NOT EXISTS cart (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            pid INTEGER NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            price INTEGER NOT NULL,
+            quantity INTEGER NOT NULL,
+            image VARCHAR(100) NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (pid) REFERENCES products(id) ON DELETE CASCADE
+        );
+        
+        -- Orders table
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name VARCHAR(20) NOT NULL,
+            number VARCHAR(10) NOT NULL,
+            email VARCHAR(100) NOT NULL,
+            method VARCHAR(50) NOT NULL,
+            address VARCHAR(500) NOT NULL,
+            total_products VARCHAR(1000) NOT NULL,
+            total_price VARCHAR(100) NOT NULL,
+            placed_on DATE NOT NULL,
+            received_on DATE DEFAULT NULL,
+            payment_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        
+        -- Create indexes for better performance
+        CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+        CREATE INDEX IF NOT EXISTS idx_cart_user ON cart(user_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(payment_status);
+        """
     
-    TABLE_NAME = "users"
-    
-    CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        full_name TEXT NOT NULL,
-        phone TEXT,
-        address TEXT,
-        role TEXT NOT NULL CHECK(role IN ('admin', 'customer')),
-        is_active INTEGER DEFAULT 1,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """
-    
-    def __init__(self, id=None, username=None, password_hash=None, email=None,
-                 full_name=None, phone=None, address=None, role='customer',
-                 is_active=1, created_at=None, updated_at=None):
-        self.id = id
-        self.username = username
-        self.password_hash = password_hash
-        self.email = email
-        self.full_name = full_name
-        self.phone = phone
-        self.address = address
-        self.role = role
-        self.is_active = is_active
-        self.created_at = created_at or datetime.now()
-        self.updated_at = updated_at or datetime.now()
-    
-    def to_dict(self):
+    @staticmethod
+    def get_sample_data():
+        """Dữ liệu mẫu để test"""
         return {
-            'id': self.id,
-            'username': self.username,
-            'email': self.email,
-            'full_name': self.full_name,
-            'phone': self.phone,
-            'address': self.address,
-            'role': self.role,
-            'is_active': self.is_active,
-            'created_at': str(self.created_at),
-            'updated_at': str(self.updated_at)
+            'admin': [
+                ('admin', 'admin123'),
+                ('manager', 'manager123')
+            ],
+            'users': [
+                ('Nguyễn Văn A', 'nguyenvana@email.com', '0901234567', 'customer123', 'Hà Nội'),
+                ('Trần Thị B', 'tranthib@email.com', '0912345678', 'user123', 'Đà Nẵng'),
+                ('Lê Văn C', 'levanc@email.com', '0923456789', 'user456', 'TP HCM')
+            ],
+            'products': [
+                ('Yamaha F310 Acoustic Guitar', 'Guitar', 3500000, 'guitar1.jpg', 15, 'Guitar acoustic chất lượng cao cho người mới bắt đầu'),
+                ('Fender Stratocaster Electric', 'Guitar', 12000000, 'guitar2.jpg', 8, 'Electric guitar chuyên nghiệp với âm thanh đỉnh cao'),
+                ('Yamaha P-45 Digital Piano', 'Piano', 11000000, 'piano1.jpg', 5, 'Đàn piano điện tử 88 phím cho người học'),
+                ('Roland FP-30X Digital Piano', 'Piano', 15500000, 'piano2.jpg', 3, 'Piano điện tử cao cấp với công nghệ hiện đại'),
+                ('Pearl Export Drum Set', 'Drums', 18000000, 'drums1.jpg', 2, 'Bộ trống chuyên nghiệp 5 trống'),
+                ('Yamaha YAS-280 Alto Saxophone', 'Wind', 25000000, 'sax1.jpg', 4, 'Saxophone alto chất lượng cao'),
+                ('Ibanez SR300E Bass Guitar', 'Guitar', 8500000, 'bass1.jpg', 10, 'Bass guitar 4 dây chất lượng'),
+                ('Casio CT-S300 Keyboard', 'Piano', 4200000, 'keyboard1.jpg', 12, 'Keyboard 61 phím di động'),
+                ('Mapex Mars Drum Set', 'Drums', 22000000, 'drums2.jpg', 3, 'Bộ trống cao cấp với shell gỗ'),
+                ('Bach TR-650 Trumpet', 'Wind', 15000000, 'trumpet1.jpg', 6, 'Trumpet chuyên nghiệp cho buổi biểu diễn')
+            ]
         }
 
-class Category:
-    """Model Category - Danh mục sản phẩm"""
+class Database:
+    """Base Database class"""
     
-    TABLE_NAME = "categories"
+    def __init__(self, db_path='data/music_store.db'):
+        self.db_path = db_path
+        self.ensure_database_exists()
     
-    CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL,
-        description TEXT,
-        icon TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """
+    def ensure_database_exists(self):
+        """Đảm bảo database và thư mục tồn tại"""
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
     
-    def __init__(self, id=None, name=None, description=None, icon=None, created_at=None):
-        self.id = id
-        self.name = name
-        self.description = description
-        self.icon = icon
-        self.created_at = created_at or datetime.now()
+    def get_connection(self):
+        """Tạo kết nối đến database"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row  # Trả về dict thay vì tuple
+        return conn
     
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'name': self.name,
-            'description': self.description,
-            'icon': self.icon,
-            'created_at': str(self.created_at)
-        }
+    def execute_query(self, query, params=None, fetch=False):
+        """
+        Thực thi câu lệnh SQL
+        
+        Args:
+            query: SQL query string
+            params: Tham số cho query
+            fetch: True để lấy kết quả, False để chỉ execute
+        
+        Returns:
+            Kết quả query hoặc None
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            
+            if fetch:
+                result = cursor.fetchall()
+                # Convert Row objects to dictionaries
+                result = [dict(row) for row in result]
+                return result
+            else:
+                conn.commit()
+                return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+            if conn:
+                conn.rollback()
+            raise
+        finally:
+            if conn:
+                conn.close()
+    
+    def execute_many(self, query, params_list):
+        """Thực thi nhiều câu lệnh cùng lúc"""
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.executemany(query, params_list)
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Database error: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        finally:
+            if conn:
+                conn.close()
+    
+    def create_tables(self):
+        """Tạo tất cả các bảng"""
+        schema = DatabaseSchema.get_schema()
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.executescript(schema)
+            conn.commit()
+            print("✓ Tables created successfully!")
+            return True
+        except sqlite3.Error as e:
+            print(f"✗ Error creating tables: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+    
+    def insert_sample_data(self):
+        """Thêm dữ liệu mẫu"""
+        data = DatabaseSchema.get_sample_data()
+        
+        try:
+            # Insert admins
+            query = "INSERT INTO admin (name, password) VALUES (?, ?)"
+            self.execute_many(query, data['admin'])
+            print("✓ Admin data inserted")
+            
+            # Insert users
+            query = "INSERT INTO users (name, email, number, password, address) VALUES (?, ?, ?, ?, ?)"
+            self.execute_many(query, data['users'])
+            print("✓ Users data inserted")
+            
+            # Insert products
+            query = """INSERT INTO products (name, category, price, image, quantity, describe) 
+                      VALUES (?, ?, ?, ?, ?, ?)"""
+            self.execute_many(query, data['products'])
+            print("✓ Products data inserted")
+            
+            return True
+        except Exception as e:
+            print(f"✗ Error inserting sample data: {e}")
+            return False
+    
+    def reset_database(self):
+        """Xóa và tạo lại database"""
+        if os.path.exists(self.db_path):
+            os.remove(self.db_path)
+            print("✓ Old database removed")
+        
+        self.ensure_database_exists()
+        self.create_tables()
+        self.insert_sample_data()
+        print("✓ Database reset completed!")
 
-class Product:
-    """Model Product - Sản phẩm"""
+def initialize_database():
+    """Khởi tạo database ban đầu"""
+    print("=" * 60)
+    print("DATABASE INITIALIZATION")
+    print("=" * 60)
     
-    TABLE_NAME = "products"
+    db = Database()
     
-    CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category_id INTEGER NOT NULL,
-        name TEXT NOT NULL,
-        brand TEXT NOT NULL,
-        price REAL NOT NULL CHECK(price >= 0),
-        stock INTEGER NOT NULL DEFAULT 0 CHECK(stock >= 0),
-        image TEXT,
-        description TEXT,
-        specifications TEXT,
-        discount_percent REAL DEFAULT 0 CHECK(discount_percent >= 0 AND discount_percent <= 100),
-        is_active INTEGER DEFAULT 1,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-    )
-    """
+    # Check if database exists
+    if not os.path.exists(db.db_path):
+        print("\n→ Creating new database...")
+        db.create_tables()
+        db.insert_sample_data()
+    else:
+        print("\n→ Database already exists")
+        choice = input("Reset database? (y/n): ")
+        if choice.lower() == 'y':
+            db.reset_database()
     
-    def __init__(self, id=None, category_id=None, name=None, brand=None,
-                 price=0, stock=0, image=None, description=None,
-                 specifications=None, discount_percent=0, is_active=1,
-                 created_at=None, updated_at=None):
-        self.id = id
-        self.category_id = category_id
-        self.name = name
-        self.brand = brand
-        self.price = price
-        self.stock = stock
-        self.image = image
-        self.description = description
-        self.specifications = specifications
-        self.discount_percent = discount_percent
-        self.is_active = is_active
-        self.created_at = created_at or datetime.now()
-        self.updated_at = updated_at or datetime.now()
-    
-    def get_final_price(self):
-        """Tính giá sau khi giảm"""
-        return self.price * (1 - self.discount_percent / 100)
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'category_id': self.category_id,
-            'name': self.name,
-            'brand': self.brand,
-            'price': self.price,
-            'stock': self.stock,
-            'image': self.image,
-            'description': self.description,
-            'specifications': self.specifications,
-            'discount_percent': self.discount_percent,
-            'final_price': self.get_final_price(),
-            'is_active': self.is_active,
-            'created_at': str(self.created_at),
-            'updated_at': str(self.updated_at)
-        }
+    print("\n✓ Database ready!")
+    print("=" * 60)
 
-class Order:
-    """Model Order - Đơn hàng"""
-    
-    TABLE_NAME = "orders"
-    
-    CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS orders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        order_number TEXT UNIQUE NOT NULL,
-        total_amount REAL NOT NULL CHECK(total_amount >= 0),
-        discount_amount REAL DEFAULT 0,
-        final_amount REAL NOT NULL CHECK(final_amount >= 0),
-        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'shipping', 'completed', 'cancelled')),
-        payment_method TEXT CHECK(payment_method IN ('cash', 'card', 'transfer', 'e-wallet')),
-        shipping_address TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        note TEXT,
-        order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        completed_date TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-    """
-    
-    def __init__(self, id=None, user_id=None, order_number=None,
-                 total_amount=0, discount_amount=0, final_amount=0,
-                 status='pending', payment_method=None, shipping_address=None,
-                 phone=None, note=None, order_date=None, completed_date=None):
-        self.id = id
-        self.user_id = user_id
-        self.order_number = order_number
-        self.total_amount = total_amount
-        self.discount_amount = discount_amount
-        self.final_amount = final_amount
-        self.status = status
-        self.payment_method = payment_method
-        self.shipping_address = shipping_address
-        self.phone = phone
-        self.note = note
-        self.order_date = order_date or datetime.now()
-        self.completed_date = completed_date
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'order_number': self.order_number,
-            'total_amount': self.total_amount,
-            'discount_amount': self.discount_amount,
-            'final_amount': self.final_amount,
-            'status': self.status,
-            'payment_method': self.payment_method,
-            'shipping_address': self.shipping_address,
-            'phone': self.phone,
-            'note': self.note,
-            'order_date': str(self.order_date),
-            'completed_date': str(self.completed_date) if self.completed_date else None
-        }
-
-class OrderItem:
-    """Model OrderItem - Chi tiết đơn hàng"""
-    
-    TABLE_NAME = "order_items"
-    
-    CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS order_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        order_id INTEGER NOT NULL,
-        product_id INTEGER NOT NULL,
-        product_name TEXT NOT NULL,
-        product_price REAL NOT NULL,
-        quantity INTEGER NOT NULL CHECK(quantity > 0),
-        subtotal REAL NOT NULL CHECK(subtotal >= 0),
-        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-        FOREIGN KEY (product_id) REFERENCES products(id)
-    )
-    """
-    
-    def __init__(self, id=None, order_id=None, product_id=None,
-                 product_name=None, product_price=0, quantity=1, subtotal=0):
-        self.id = id
-        self.order_id = order_id
-        self.product_id = product_id
-        self.product_name = product_name
-        self.product_price = product_price
-        self.quantity = quantity
-        self.subtotal = subtotal
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'order_id': self.order_id,
-            'product_id': self.product_id,
-            'product_name': self.product_name,
-            'product_price': self.product_price,
-            'quantity': self.quantity,
-            'subtotal': self.subtotal
-        }
-
-class Cart:
-    """Model Cart - Giỏ hàng"""
-    
-    TABLE_NAME = "cart"
-    
-    CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS cart (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        product_id INTEGER NOT NULL,
-        quantity INTEGER NOT NULL DEFAULT 1 CHECK(quantity > 0),
-        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-        UNIQUE(user_id, product_id)
-    )
-    """
-    
-    def __init__(self, id=None, user_id=None, product_id=None,
-                 quantity=1, added_at=None):
-        self.id = id
-        self.user_id = user_id
-        self.product_id = product_id
-        self.quantity = quantity
-        self.added_at = added_at or datetime.now()
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'product_id': self.product_id,
-            'quantity': self.quantity,
-            'added_at': str(self.added_at)
-        }
-
-class Review:
-    """Model Review - Đánh giá sản phẩm"""
-    
-    TABLE_NAME = "reviews"
-    
-    CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS reviews (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        product_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL,
-        rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
-        comment TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-    """
-    
-    def __init__(self, id=None, product_id=None, user_id=None,
-                 rating=5, comment=None, created_at=None):
-        self.id = id
-        self.product_id = product_id
-        self.user_id = user_id
-        self.rating = rating
-        self.comment = comment
-        self.created_at = created_at or datetime.now()
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'product_id': self.product_id,
-            'user_id': self.user_id,
-            'rating': self.rating,
-            'comment': self.comment,
-            'created_at': str(self.created_at)
-        }
-
-# Danh sách tất cả các models
-ALL_MODELS = [
-    User,
-    Category,
-    Product,
-    Order,
-    OrderItem,
-    Cart,
-    Review
-]
+if __name__ == "__main__":
+    initialize_database()

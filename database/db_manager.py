@@ -1,467 +1,338 @@
 """
-Database Manager - Quản lý kết nối và thao tác database
+Database Manager - Quản lý các thao tác CRUD
 """
-import sqlite3
-import os
-from typing import List, Dict, Optional, Any
+from database.models import Database
 from datetime import datetime
-import bcrypt
+import hashlib
 
-from database.models import (
-    User, Category, Product, Order, OrderItem, Cart, Review, ALL_MODELS
-)
-
-class DatabaseManager:
-    """Quản lý database"""
+class AuthManager:
+    """Quản lý xác thực người dùng"""
     
-    def __init__(self, db_path: str = "data/music_store.db"):
-        self.db_path = db_path
-        self.ensure_data_folder()
-        self.connection = None
-        self.cursor = None
+    def __init__(self):
+        self.db = Database()
     
-    def ensure_data_folder(self):
-        """Tạo thư mục data nếu chưa có"""
-        folder = os.path.dirname(self.db_path)
-        if folder and not os.path.exists(folder):
-            os.makedirs(folder)
+    def hash_password(self, password):
+        """Hash mật khẩu"""
+        return hashlib.md5(password.encode()).hexdigest()
     
-    def connect(self):
-        """Kết nối database"""
+    def login_admin(self, username, password):
+        """Đăng nhập admin"""
+        query = "SELECT * FROM admin WHERE name = ? AND password = ?"
+        result = self.db.execute_query(query, (username, password), fetch=True)
+        return result[0] if result else None
+    
+    def login_user(self, email, password):
+        """Đăng nhập user"""
+        query = "SELECT * FROM users WHERE email = ? AND password = ?"
+        result = self.db.execute_query(query, (email, password), fetch=True)
+        return result[0] if result else None
+    
+    def register_user(self, name, email, number, password, address=''):
+        """Đăng ký user mới"""
         try:
-            self.connection = sqlite3.connect(self.db_path)
-            self.connection.row_factory = sqlite3.Row
-            self.cursor = self.connection.cursor()
-            # Enable foreign keys
-            self.cursor.execute("PRAGMA foreign_keys = ON")
-            return True
-        except sqlite3.Error as e:
-            print(f"Database connection error: {e}")
-            return False
-    
-    def disconnect(self):
-        """Ngắt kết nối database"""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
-            self.cursor = None
-    
-    def create_tables(self):
-        """Tạo tất cả các bảng"""
-        try:
-            self.connect()
-            for model in ALL_MODELS:
-                self.cursor.execute(model.CREATE_TABLE)
-            self.connection.commit()
-            print("✅ All tables created successfully!")
-            return True
-        except sqlite3.Error as e:
-            print(f"❌ Error creating tables: {e}")
-            return False
-        finally:
-            self.disconnect()
-    
-    def drop_tables(self):
-        """Xóa tất cả các bảng"""
-        try:
-            self.connect()
-            for model in reversed(ALL_MODELS):
-                self.cursor.execute(f"DROP TABLE IF EXISTS {model.TABLE_NAME}")
-            self.connection.commit()
-            print("✅ All tables dropped successfully!")
-            return True
-        except sqlite3.Error as e:
-            print(f"❌ Error dropping tables: {e}")
-            return False
-        finally:
-            self.disconnect()
-    
-    def reset_database(self):
-        """Reset database - xóa và tạo lại"""
-        self.drop_tables()
-        self.create_tables()
-    
-    def execute_query(self, query: str, params: tuple = None, fetch: str = None):
-        """
-        Thực thi query
-        fetch: 'one', 'all', None
-        """
-        try:
-            self.connect()
-            if params:
-                self.cursor.execute(query, params)
-            else:
-                self.cursor.execute(query)
-            
-            if fetch == 'one':
-                result = self.cursor.fetchone()
-                return dict(result) if result else None
-            elif fetch == 'all':
-                results = self.cursor.fetchall()
-                return [dict(row) for row in results]
-            else:
-                self.connection.commit()
-                return self.cursor.lastrowid
-        except sqlite3.Error as e:
-            print(f"Query error: {e}")
+            query = """INSERT INTO users (name, email, number, password, address) 
+                      VALUES (?, ?, ?, ?, ?)"""
+            user_id = self.db.execute_query(query, (name, email, number, password, address))
+            return user_id
+        except Exception as e:
+            print(f"Register error: {e}")
             return None
-        finally:
-            self.disconnect()
     
-    # ==================== USER OPERATIONS ====================
+    def check_email_exists(self, email):
+        """Kiểm tra email đã tồn tại"""
+        query = "SELECT id FROM users WHERE email = ?"
+        result = self.db.execute_query(query, (email,), fetch=True)
+        return len(result) > 0
+
+class ProductManager:
+    """Quản lý sản phẩm"""
     
-    def create_user(self, username: str, password: str, email: str,
-                    full_name: str, role: str = 'customer', **kwargs) -> Optional[int]:
-        """Tạo user mới"""
-        # Hash password
-        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-        
-        query = """
-        INSERT INTO users (username, password_hash, email, full_name, phone, address, role)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """
-        params = (
-            username,
-            password_hash.decode('utf-8'),
-            email,
-            full_name,
-            kwargs.get('phone', ''),
-            kwargs.get('address', ''),
-            role
-        )
-        return self.execute_query(query, params)
+    def __init__(self):
+        self.db = Database()
     
-    def verify_user(self, username: str, password: str) -> Optional[Dict]:
-        """Xác thực user"""
-        query = "SELECT * FROM users WHERE username = ? AND is_active = 1"
-        user = self.execute_query(query, (username,), fetch='one')
-        
-        if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-            return user
-        return None
+    def get_all_products(self):
+        """Lấy tất cả sản phẩm"""
+        query = "SELECT * FROM products ORDER BY id DESC"
+        return self.db.execute_query(query, fetch=True)
     
-    def get_user_by_id(self, user_id: int) -> Optional[Dict]:
-        """Lấy user theo ID"""
-        query = "SELECT * FROM users WHERE id = ?"
-        return self.execute_query(query, (user_id,), fetch='one')
-    
-    def get_user_by_username(self, username: str) -> Optional[Dict]:
-        """Lấy user theo username"""
-        query = "SELECT * FROM users WHERE username = ?"
-        return self.execute_query(query, (username,), fetch='one')
-    
-    def get_all_users(self, role: str = None) -> List[Dict]:
-        """Lấy danh sách users"""
-        if role:
-            query = "SELECT * FROM users WHERE role = ? ORDER BY created_at DESC"
-            return self.execute_query(query, (role,), fetch='all') or []
-        else:
-            query = "SELECT * FROM users ORDER BY created_at DESC"
-            return self.execute_query(query, fetch='all') or []
-    
-    def update_user(self, user_id: int, **kwargs) -> bool:
-        """Cập nhật thông tin user"""
-        allowed_fields = ['email', 'full_name', 'phone', 'address', 'is_active']
-        updates = []
-        params = []
-        
-        for field, value in kwargs.items():
-            if field in allowed_fields:
-                updates.append(f"{field} = ?")
-                params.append(value)
-        
-        if not updates:
-            return False
-        
-        params.append(user_id)
-        query = f"UPDATE users SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-        result = self.execute_query(query, tuple(params))
-        return result is not None
-    
-    # ==================== CATEGORY OPERATIONS ====================
-    
-    def create_category(self, name: str, description: str = None, icon: str = None) -> Optional[int]:
-        """Tạo danh mục mới"""
-        query = "INSERT INTO categories (name, description, icon) VALUES (?, ?, ?)"
-        return self.execute_query(query, (name, description, icon))
-    
-    def get_all_categories(self) -> List[Dict]:
-        """Lấy tất cả danh mục"""
-        query = "SELECT * FROM categories ORDER BY name"
-        return self.execute_query(query, fetch='all') or []
-    
-    def get_category_by_id(self, category_id: int) -> Optional[Dict]:
-        """Lấy danh mục theo ID"""
-        query = "SELECT * FROM categories WHERE id = ?"
-        return self.execute_query(query, (category_id,), fetch='one')
-    
-    # ==================== PRODUCT OPERATIONS ====================
-    
-    def create_product(self, category_id: int, name: str, brand: str,
-                      price: float, stock: int, **kwargs) -> Optional[int]:
-        """Tạo sản phẩm mới"""
-        query = """
-        INSERT INTO products (category_id, name, brand, price, stock, image, 
-                            description, specifications, discount_percent)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        params = (
-            category_id, name, brand, price, stock,
-            kwargs.get('image', ''),
-            kwargs.get('description', ''),
-            kwargs.get('specifications', ''),
-            kwargs.get('discount_percent', 0)
-        )
-        return self.execute_query(query, params)
-    
-    def get_all_products(self, category_id: int = None, is_active: bool = True) -> List[Dict]:
-        """Lấy danh sách sản phẩm"""
-        if category_id:
-            query = """
-            SELECT p.*, c.name as category_name 
-            FROM products p
-            JOIN categories c ON p.category_id = c.id
-            WHERE p.category_id = ? AND p.is_active = ?
-            ORDER BY p.created_at DESC
-            """
-            return self.execute_query(query, (category_id, int(is_active)), fetch='all') or []
-        else:
-            query = """
-            SELECT p.*, c.name as category_name 
-            FROM products p
-            JOIN categories c ON p.category_id = c.id
-            WHERE p.is_active = ?
-            ORDER BY p.created_at DESC
-            """
-            return self.execute_query(query, (int(is_active),), fetch='all') or []
-    
-    def get_product_by_id(self, product_id: int) -> Optional[Dict]:
+    def get_product_by_id(self, product_id):
         """Lấy sản phẩm theo ID"""
-        query = """
-        SELECT p.*, c.name as category_name 
-        FROM products p
-        JOIN categories c ON p.category_id = c.id
-        WHERE p.id = ?
-        """
-        return self.execute_query(query, (product_id,), fetch='one')
+        query = "SELECT * FROM products WHERE id = ?"
+        result = self.db.execute_query(query, (product_id,), fetch=True)
+        return result[0] if result else None
     
-    def search_products(self, keyword: str) -> List[Dict]:
+    def get_products_by_category(self, category):
+        """Lấy sản phẩm theo danh mục"""
+        query = "SELECT * FROM products WHERE category = ? ORDER BY id DESC"
+        return self.db.execute_query(query, (category,), fetch=True)
+    
+    def search_products(self, keyword):
         """Tìm kiếm sản phẩm"""
-        query = """
-        SELECT p.*, c.name as category_name 
-        FROM products p
-        JOIN categories c ON p.category_id = c.id
-        WHERE (p.name LIKE ? OR p.brand LIKE ? OR p.description LIKE ?)
-        AND p.is_active = 1
-        ORDER BY p.name
-        """
+        query = """SELECT * FROM products 
+                  WHERE name LIKE ? OR category LIKE ? OR describe LIKE ?
+                  ORDER BY id DESC"""
         search_term = f"%{keyword}%"
-        return self.execute_query(query, (search_term, search_term, search_term), fetch='all') or []
+        return self.db.execute_query(query, (search_term, search_term, search_term), fetch=True)
     
-    def update_product(self, product_id: int, **kwargs) -> bool:
+    def add_product(self, name, category, price, image, quantity, describe):
+        """Thêm sản phẩm mới"""
+        try:
+            query = """INSERT INTO products (name, category, price, image, quantity, describe) 
+                      VALUES (?, ?, ?, ?, ?, ?)"""
+            product_id = self.db.execute_query(
+                query, 
+                (name, category, price, image, quantity, describe)
+            )
+            return product_id
+        except Exception as e:
+            print(f"Add product error: {e}")
+            return None
+    
+    def update_product(self, product_id, name, category, price, image, quantity, describe):
         """Cập nhật sản phẩm"""
-        allowed_fields = ['name', 'brand', 'price', 'stock', 'image', 
-                         'description', 'specifications', 'discount_percent', 'is_active']
-        updates = []
-        params = []
-        
-        for field, value in kwargs.items():
-            if field in allowed_fields:
-                updates.append(f"{field} = ?")
-                params.append(value)
-        
-        if not updates:
+        try:
+            query = """UPDATE products 
+                      SET name=?, category=?, price=?, image=?, quantity=?, describe=?
+                      WHERE id=?"""
+            self.db.execute_query(
+                query, 
+                (name, category, price, image, quantity, describe, product_id)
+            )
+            return True
+        except Exception as e:
+            print(f"Update product error: {e}")
             return False
-        
-        params.append(product_id)
-        query = f"UPDATE products SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-        result = self.execute_query(query, tuple(params))
-        return result is not None
     
-    def update_stock(self, product_id: int, quantity: int) -> bool:
-        """Cập nhật tồn kho"""
-        query = "UPDATE products SET stock = stock + ? WHERE id = ?"
-        result = self.execute_query(query, (quantity, product_id))
-        return result is not None
+    def delete_product(self, product_id):
+        """Xóa sản phẩm"""
+        try:
+            query = "DELETE FROM products WHERE id = ?"
+            self.db.execute_query(query, (product_id,))
+            return True
+        except Exception as e:
+            print(f"Delete product error: {e}")
+            return False
     
-    def delete_product(self, product_id: int) -> bool:
-        """Xóa sản phẩm (soft delete)"""
-        query = "UPDATE products SET is_active = 0 WHERE id = ?"
-        result = self.execute_query(query, (product_id,))
-        return result is not None
+    def update_quantity(self, product_id, quantity):
+        """Cập nhật số lượng tồn kho"""
+        try:
+            query = "UPDATE products SET quantity = ? WHERE id = ?"
+            self.db.execute_query(query, (quantity, product_id))
+            return True
+        except Exception as e:
+            print(f"Update quantity error: {e}")
+            return False
     
-    # ==================== CART OPERATIONS ====================
+    def get_categories(self):
+        """Lấy danh sách categories"""
+        query = "SELECT DISTINCT category FROM products ORDER BY category"
+        result = self.db.execute_query(query, fetch=True)
+        return [row['category'] for row in result]
+
+class CartManager:
+    """Quản lý giỏ hàng"""
     
-    def add_to_cart(self, user_id: int, product_id: int, quantity: int = 1) -> bool:
+    def __init__(self):
+        self.db = Database()
+    
+    def add_to_cart(self, user_id, product_id, name, price, quantity, image):
         """Thêm vào giỏ hàng"""
-        # Check if already in cart
-        check_query = "SELECT id, quantity FROM cart WHERE user_id = ? AND product_id = ?"
-        existing = self.execute_query(check_query, (user_id, product_id), fetch='one')
-        
-        if existing:
-            # Update quantity
-            query = "UPDATE cart SET quantity = quantity + ? WHERE id = ?"
-            result = self.execute_query(query, (quantity, existing['id']))
-        else:
-            # Insert new
-            query = "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)"
-            result = self.execute_query(query, (user_id, product_id, quantity))
-        
-        return result is not None
+        try:
+            # Check if product already in cart
+            check_query = "SELECT * FROM cart WHERE user_id = ? AND pid = ?"
+            existing = self.db.execute_query(check_query, (user_id, product_id), fetch=True)
+            
+            if existing:
+                # Update quantity
+                new_quantity = existing[0]['quantity'] + quantity
+                update_query = "UPDATE cart SET quantity = ? WHERE id = ?"
+                self.db.execute_query(update_query, (new_quantity, existing[0]['id']))
+            else:
+                # Insert new
+                insert_query = """INSERT INTO cart (user_id, pid, name, price, quantity, image) 
+                                 VALUES (?, ?, ?, ?, ?, ?)"""
+                self.db.execute_query(
+                    insert_query,
+                    (user_id, product_id, name, price, quantity, image)
+                )
+            return True
+        except Exception as e:
+            print(f"Add to cart error: {e}")
+            return False
     
-    def get_cart_items(self, user_id: int) -> List[Dict]:
-        """Lấy danh sách giỏ hàng"""
-        query = """
-        SELECT c.*, p.name, p.brand, p.price, p.stock, p.image, p.discount_percent,
-               (p.price * (1 - p.discount_percent / 100) * c.quantity) as subtotal
-        FROM cart c
-        JOIN products p ON c.product_id = p.id
-        WHERE c.user_id = ? AND p.is_active = 1
-        ORDER BY c.added_at DESC
-        """
-        return self.execute_query(query, (user_id,), fetch='all') or []
+    def get_cart_items(self, user_id):
+        """Lấy giỏ hàng của user"""
+        query = "SELECT * FROM cart WHERE user_id = ?"
+        return self.db.execute_query(query, (user_id,), fetch=True)
     
-    def update_cart_quantity(self, cart_id: int, quantity: int) -> bool:
+    def update_cart_quantity(self, cart_id, quantity):
         """Cập nhật số lượng trong giỏ"""
-        query = "UPDATE cart SET quantity = ? WHERE id = ?"
-        result = self.execute_query(query, (quantity, cart_id))
-        return result is not None
+        try:
+            query = "UPDATE cart SET quantity = ? WHERE id = ?"
+            self.db.execute_query(query, (quantity, cart_id))
+            return True
+        except Exception as e:
+            print(f"Update cart error: {e}")
+            return False
     
-    def remove_from_cart(self, cart_id: int) -> bool:
+    def remove_from_cart(self, cart_id):
         """Xóa khỏi giỏ hàng"""
-        query = "DELETE FROM cart WHERE id = ?"
-        result = self.execute_query(query, (cart_id,))
-        return result is not None
+        try:
+            query = "DELETE FROM cart WHERE id = ?"
+            self.db.execute_query(query, (cart_id,))
+            return True
+        except Exception as e:
+            print(f"Remove from cart error: {e}")
+            return False
     
-    def clear_cart(self, user_id: int) -> bool:
+    def clear_cart(self, user_id):
         """Xóa toàn bộ giỏ hàng"""
-        query = "DELETE FROM cart WHERE user_id = ?"
-        result = self.execute_query(query, (user_id,))
-        return result is not None
+        try:
+            query = "DELETE FROM cart WHERE user_id = ?"
+            self.db.execute_query(query, (user_id,))
+            return True
+        except Exception as e:
+            print(f"Clear cart error: {e}")
+            return False
+
+class OrderManager:
+    """Quản lý đơn hàng"""
     
-    # ==================== ORDER OPERATIONS ====================
+    def __init__(self):
+        self.db = Database()
     
-    def create_order(self, user_id: int, items: List[Dict], 
-                    shipping_address: str, phone: str, **kwargs) -> Optional[int]:
+    def create_order(self, user_id, name, number, email, method, address, 
+                    total_products, total_price, payment_status='pending'):
         """Tạo đơn hàng mới"""
         try:
-            self.connect()
-            
-            # Generate order number
-            order_number = f"ORD{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            
-            # Calculate total
-            total_amount = sum(item['subtotal'] for item in items)
-            discount_amount = kwargs.get('discount_amount', 0)
-            final_amount = total_amount - discount_amount
-            
-            # Insert order
-            order_query = """
-            INSERT INTO orders (user_id, order_number, total_amount, discount_amount,
-                              final_amount, payment_method, shipping_address, phone, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            order_params = (
-                user_id, order_number, total_amount, discount_amount, final_amount,
-                kwargs.get('payment_method', 'cash'),
-                shipping_address, phone,
-                kwargs.get('note', '')
+            query = """INSERT INTO orders 
+                      (user_id, name, number, email, method, address, 
+                       total_products, total_price, placed_on, payment_status) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            order_id = self.db.execute_query(
+                query,
+                (user_id, name, number, email, method, address,
+                 total_products, total_price, datetime.now().date(), payment_status)
             )
-            self.cursor.execute(order_query, order_params)
-            order_id = self.cursor.lastrowid
-            
-            # Insert order items
-            item_query = """
-            INSERT INTO order_items (order_id, product_id, product_name, 
-                                    product_price, quantity, subtotal)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """
-            for item in items:
-                item_params = (
-                    order_id,
-                    item['product_id'],
-                    item['name'],
-                    item['price'],
-                    item['quantity'],
-                    item['subtotal']
-                )
-                self.cursor.execute(item_query, item_params)
-                
-                # Update stock
-                self.cursor.execute(
-                    "UPDATE products SET stock = stock - ? WHERE id = ?",
-                    (item['quantity'], item['product_id'])
-                )
-            
-            self.connection.commit()
             return order_id
-            
-        except sqlite3.Error as e:
-            print(f"Order creation error: {e}")
-            if self.connection:
-                self.connection.rollback()
+        except Exception as e:
+            print(f"Create order error: {e}")
             return None
-        finally:
-            self.disconnect()
     
-    def get_order_by_id(self, order_id: int) -> Optional[Dict]:
-        """Lấy đơn hàng theo ID"""
-        query = """
-        SELECT o.*, u.full_name as customer_name, u.email as customer_email
-        FROM orders o
-        JOIN users u ON o.user_id = u.id
-        WHERE o.id = ?
-        """
-        return self.execute_query(query, (order_id,), fetch='one')
-    
-    def get_order_items(self, order_id: int) -> List[Dict]:
-        """Lấy chi tiết đơn hàng"""
-        query = "SELECT * FROM order_items WHERE order_id = ?"
-        return self.execute_query(query, (order_id,), fetch='all') or []
-    
-    def get_user_orders(self, user_id: int) -> List[Dict]:
-        """Lấy danh sách đơn hàng của user"""
-        query = """
-        SELECT * FROM orders 
-        WHERE user_id = ? 
-        ORDER BY order_date DESC
-        """
-        return self.execute_query(query, (user_id,), fetch='all') or []
-    
-    def get_all_orders(self, status: str = None) -> List[Dict]:
+    def get_all_orders(self):
         """Lấy tất cả đơn hàng"""
-        if status:
-            query = """
-            SELECT o.*, u.full_name as customer_name
-            FROM orders o
-            JOIN users u ON o.user_id = u.id
-            WHERE o.status = ?
-            ORDER BY o.order_date DESC
-            """
-            return self.execute_query(query, (status,), fetch='all') or []
-        else:
-            query = """
-            SELECT o.*, u.full_name as customer_name
-            FROM orders o
-            JOIN users u ON o.user_id = u.id
-            ORDER BY o.order_date DESC
-            """
-            return self.execute_query(query, fetch='all') or []
+        query = "SELECT * FROM orders ORDER BY id DESC"
+        return self.db.execute_query(query, fetch=True)
     
-    def update_order_status(self, order_id: int, status: str) -> bool:
+    def get_orders_by_user(self, user_id):
+        """Lấy đơn hàng của user"""
+        query = "SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC"
+        return self.db.execute_query(query, (user_id,), fetch=True)
+    
+    def get_order_by_id(self, order_id):
+        """Lấy đơn hàng theo ID"""
+        query = "SELECT * FROM orders WHERE id = ?"
+        result = self.db.execute_query(query, (order_id,), fetch=True)
+        return result[0] if result else None
+    
+    def update_order_status(self, order_id, status):
         """Cập nhật trạng thái đơn hàng"""
-        query = "UPDATE orders SET status = ? WHERE id = ?"
-        if status == 'completed':
-            query = "UPDATE orders SET status = ?, completed_date = CURRENT_TIMESTAMP WHERE id = ?"
-        result = self.execute_query(query, (status, order_id))
-        return result is not None
+        try:
+            query = "UPDATE orders SET payment_status = ? WHERE id = ?"
+            self.db.execute_query(query, (status, order_id))
+            return True
+        except Exception as e:
+            print(f"Update order status error: {e}")
+            return False
+    
+    def update_received_date(self, order_id):
+        """Cập nhật ngày nhận hàng"""
+        try:
+            query = "UPDATE orders SET received_on = ? WHERE id = ?"
+            self.db.execute_query(query, (datetime.now().date(), order_id))
+            return True
+        except Exception as e:
+            print(f"Update received date error: {e}")
+            return False
+    
+    def delete_order(self, order_id):
+        """Xóa đơn hàng"""
+        try:
+            query = "DELETE FROM orders WHERE id = ?"
+            self.db.execute_query(query, (order_id,))
+            return True
+        except Exception as e:
+            print(f"Delete order error: {e}")
+            return False
+    
+    def get_orders_by_status(self, status):
+        """Lấy đơn hàng theo trạng thái"""
+        query = "SELECT * FROM orders WHERE payment_status = ? ORDER BY id DESC"
+        return self.db.execute_query(query, (status,), fetch=True)
 
-# Singleton instance
-_db_instance = None
+class UserManager:
+    """Quản lý người dùng"""
+    
+    def __init__(self):
+        self.db = Database()
+    
+    def get_all_users(self):
+        """Lấy tất cả users"""
+        query = "SELECT * FROM users ORDER BY id DESC"
+        return self.db.execute_query(query, fetch=True)
+    
+    def get_user_by_id(self, user_id):
+        """Lấy user theo ID"""
+        query = "SELECT * FROM users WHERE id = ?"
+        result = self.db.execute_query(query, (user_id,), fetch=True)
+        return result[0] if result else None
+    
+    def update_user(self, user_id, name, email, number, address):
+        """Cập nhật thông tin user"""
+        try:
+            query = """UPDATE users 
+                      SET name=?, email=?, number=?, address=?
+                      WHERE id=?"""
+            self.db.execute_query(query, (name, email, number, address, user_id))
+            return True
+        except Exception as e:
+            print(f"Update user error: {e}")
+            return False
+    
+    def delete_user(self, user_id):
+        """Xóa user"""
+        try:
+            query = "DELETE FROM users WHERE id = ?"
+            self.db.execute_query(query, (user_id,))
+            return True
+        except Exception as e:
+            print(f"Delete user error: {e}")
+            return False
 
-def get_db() -> DatabaseManager:
-    """Get database instance"""
-    global _db_instance
-    if _db_instance is None:
-        _db_instance = DatabaseManager()
-    return _db_instance
+# Test functions
+if __name__ == "__main__":
+    print("Testing Database Managers...")
+    
+    # Test ProductManager
+    pm = ProductManager()
+    print("\n=== PRODUCTS ===")
+    products = pm.get_all_products()
+    print(f"Total products: {len(products)}")
+    for p in products[:3]:
+        print(f"- {p['name']}: {p['price']:,} VND")
+    
+    # Test categories
+    categories = pm.get_categories()
+    print(f"\nCategories: {categories}")
+    
+    # Test AuthManager
+    am = AuthManager()
+    print("\n=== AUTHENTICATION ===")
+    admin = am.login_admin('admin', 'admin123')
+    print(f"Admin login: {admin['name'] if admin else 'Failed'}")
+    
+    # Test OrderManager
+    om = OrderManager()
+    print("\n=== ORDERS ===")
+    orders = om.get_all_orders()
+    print(f"Total orders: {len(orders)}")

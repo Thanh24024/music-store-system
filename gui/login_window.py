@@ -8,10 +8,11 @@ sys.path.append('..')
 from gui.styles.theme import Theme
 
 class LoginWindow:
-    def __init__(self, root):
+    def __init__(self, root, auth_manager=None):
         self.root = root
+        self.auth_manager = auth_manager  # Store auth_manager
         self.root.title("Đăng nhập - Music Store")
-        self.root.geometry("450x600")
+        self.root.geometry("450x800")
         self.root.resizable(False, False)
         
         # Center window
@@ -238,8 +239,16 @@ class LoginWindow:
     
     def open_register(self):
         """Mở màn hình đăng ký"""
-        messagebox.showinfo("Đăng ký", "Màn hình đăng ký sẽ được mở!")
-        # TODO: Implement register window
+        # Import here to avoid circular import
+        from gui.register_window import RegisterWindow
+        
+        # Create new window for register
+        register_root = tk.Toplevel(self.root)
+        
+        def on_register_success():
+            pass  # Just close register window
+        
+        RegisterWindow(register_root, self.auth_manager, on_register_success)
     
     def open_admin_panel(self):
         """Mở giao diện quản trị"""

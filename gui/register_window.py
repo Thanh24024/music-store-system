@@ -1,31 +1,34 @@
 """
-Register Window - Đăng ký tài khoản
+Register Window - Màn hình đăng ký người dùng mới
 """
 import tkinter as tk
 from tkinter import messagebox
 import sys
-import os
-import re
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+sys.path.append('..')
 from gui.styles.theme import Theme
-from database.db_manager import get_db
+import re
 
 class RegisterWindow:
-    def __init__(self, root, on_register_success=None):
+    def __init__(self, root, auth_manager=None, on_register_success=None):
         self.root = root
+        self.auth_manager = auth_manager
+        self.on_register_success = on_register_success
+        
         self.root.title("Đăng ký - Music Store")
-        self.root.geometry("500x700")
+        self.root.geometry("500x950")
         self.root.resizable(False, False)
         
-        self.on_register_success = on_register_success
-        self.db = get_db()
-        
+        # Center window
         self.center_window()
+        
+        # Configure root
         self.root.configure(bg=Theme.BG_PRIMARY)
+        
+        # Create UI
         self.create_widgets()
-    
+        
     def center_window(self):
+        """Căn giữa cửa sổ"""
         self.root.update_idletasks()
         width = self.root.winfo_width()
         height = self.root.winfo_height()
@@ -34,71 +37,96 @@ class RegisterWindow:
         self.root.geometry(f'{width}x{height}+{x}+{y}')
     
     def create_widgets(self):
+        # Main Container
         main_frame = tk.Frame(self.root, **Theme.get_frame_style())
         main_frame.pack(fill=tk.BOTH, expand=True, padx=40, pady=30)
         
-        # Title
+        # Title Section
+        title_frame = tk.Frame(main_frame, **Theme.get_frame_style())
+        title_frame.pack(pady=(0, 15))
+        
+        # Icon
+        icon_label = tk.Label(
+            title_frame,
+            text="🎸",
+            font=("Segoe UI", 40),
+            **Theme.get_frame_style()
+        )
+        icon_label.pack()
+        
         title_label = tk.Label(
-            main_frame,
+            title_frame,
             text="Đăng ký tài khoản",
             **Theme.get_label_style("title")
         )
-        title_label.pack(pady=(0, 30))
+        title_label.pack(pady=(10, 5))
         
-        # Form
+        subtitle_label = tk.Label(
+            title_frame,
+            text="Tạo tài khoản mới để mua sắm",
+            **Theme.get_label_style("secondary")
+        )
+        subtitle_label.pack()
+        
+        # Register Form
         form_frame = tk.Frame(main_frame, **Theme.get_frame_style())
         form_frame.pack(fill=tk.BOTH, expand=True)
         
         # Full Name
-        tk.Label(form_frame, text="Họ và tên *", **Theme.get_label_style("normal")).pack(anchor=tk.W, pady=(10, 5))
-        self.fullname_entry = tk.Entry(form_frame, **Theme.get_entry_style())
-        self.fullname_entry.pack(fill=tk.X, ipady=8)
-        
-        # Username
-        tk.Label(form_frame, text="Tên đăng nhập *", **Theme.get_label_style("normal")).pack(anchor=tk.W, pady=(15, 5))
-        self.username_entry = tk.Entry(form_frame, **Theme.get_entry_style())
-        self.username_entry.pack(fill=tk.X, ipady=8)
+        self.create_form_field(form_frame, "Họ và tên *", "name")
         
         # Email
-        tk.Label(form_frame, text="Email *", **Theme.get_label_style("normal")).pack(anchor=tk.W, pady=(15, 5))
-        self.email_entry = tk.Entry(form_frame, **Theme.get_entry_style())
-        self.email_entry.pack(fill=tk.X, ipady=8)
+        self.create_form_field(form_frame, "Email *", "email")
         
-        # Phone
-        tk.Label(form_frame, text="Số điện thoại", **Theme.get_label_style("normal")).pack(anchor=tk.W, pady=(15, 5))
-        self.phone_entry = tk.Entry(form_frame, **Theme.get_entry_style())
-        self.phone_entry.pack(fill=tk.X, ipady=8)
-        
-        # Address
-        tk.Label(form_frame, text="Địa chỉ", **Theme.get_label_style("normal")).pack(anchor=tk.W, pady=(15, 5))
-        self.address_entry = tk.Entry(form_frame, **Theme.get_entry_style())
-        self.address_entry.pack(fill=tk.X, ipady=8)
+        # Phone Number
+        self.create_form_field(form_frame, "Số điện thoại *", "phone")
         
         # Password
-        tk.Label(form_frame, text="Mật khẩu *", **Theme.get_label_style("normal")).pack(anchor=tk.W, pady=(15, 5))
-        self.password_entry = tk.Entry(form_frame, show="●", **Theme.get_entry_style())
+        password_label = tk.Label(
+            form_frame,
+            text="Mật khẩu *",
+            **Theme.get_label_style("normal")
+        )
+        password_label.pack(anchor=tk.W, pady=(15, 5))
+        
+        self.password_entry = tk.Entry(
+            form_frame,
+            show="●",
+            **Theme.get_entry_style()
+        )
         self.password_entry.pack(fill=tk.X, ipady=8)
         
         # Confirm Password
-        tk.Label(form_frame, text="Xác nhận mật khẩu *", **Theme.get_label_style("normal")).pack(anchor=tk.W, pady=(15, 5))
-        self.confirm_password_entry = tk.Entry(form_frame, show="●", **Theme.get_entry_style())
-        self.confirm_password_entry.pack(fill=tk.X, ipady=8)
-        
-        # Terms & Conditions
-        terms_frame = tk.Frame(form_frame, **Theme.get_frame_style())
-        terms_frame.pack(fill=tk.X, pady=(20, 0))
-        
-        self.terms_var = tk.BooleanVar()
-        terms_check = tk.Checkbutton(
-            terms_frame,
-            text="Tôi đồng ý với Điều khoản sử dụng",
-            variable=self.terms_var,
-            font=(Theme.FONT_FAMILY, Theme.FONT_SIZE_SMALL),
-            bg=Theme.BG_PRIMARY,
-            activebackground=Theme.BG_PRIMARY,
-            cursor="hand2"
+        confirm_label = tk.Label(
+            form_frame,
+            text="Xác nhận mật khẩu *",
+            **Theme.get_label_style("normal")
         )
-        terms_check.pack(side=tk.LEFT)
+        confirm_label.pack(anchor=tk.W, pady=(15, 5))
+        
+        self.confirm_entry = tk.Entry(
+            form_frame,
+            show="●",
+            **Theme.get_entry_style()
+        )
+        self.confirm_entry.pack(fill=tk.X, ipady=8)
+        
+        # Address
+        address_label = tk.Label(
+            form_frame,
+            text="Địa chỉ",
+            **Theme.get_label_style("normal")
+        )
+        address_label.pack(anchor=tk.W, pady=(15, 5))
+        
+        self.address_text = tk.Text(
+            form_frame,
+            height=1,
+            font=(Theme.FONT_FAMILY, Theme.FONT_SIZE_NORMAL),
+            relief="solid",
+            borderwidth=1
+        )
+        self.address_text.pack(fill=tk.X)
         
         # Register Button
         register_btn = tk.Button(
@@ -130,9 +158,19 @@ class RegisterWindow:
             command=self.back_to_login
         )
         back_btn.pack(side=tk.LEFT, padx=5)
+    
+    def create_form_field(self, parent, label_text, field_name):
+        """Tạo form field"""
+        label = tk.Label(
+            parent,
+            text=label_text,
+            **Theme.get_label_style("normal")
+        )
+        label.pack(anchor=tk.W, pady=(15, 5))
         
-        # Focus
-        self.fullname_entry.focus()
+        entry = tk.Entry(parent, **Theme.get_entry_style())
+        entry.pack(fill=tk.X, ipady=8)
+        setattr(self, f"{field_name}_entry", entry)
     
     def validate_email(self, email):
         """Validate email format"""
@@ -140,92 +178,100 @@ class RegisterWindow:
         return re.match(pattern, email) is not None
     
     def validate_phone(self, phone):
-        """Validate phone number"""
-        if not phone:
-            return True  # Optional field
-        pattern = r'^0\d{9,10}$'
+        """Validate phone number (10 digits)"""
+        pattern = r'^0\d{9}$'
         return re.match(pattern, phone) is not None
     
-    def register(self):
-        """Xử lý đăng ký"""
-        # Get values
-        full_name = self.fullname_entry.get().strip()
-        username = self.username_entry.get().strip()
+    def validate_form(self):
+        """Validate form data"""
+        # Check empty fields
+        if not self.name_entry.get().strip():
+            messagebox.showerror("Lỗi", "Vui lòng nhập họ tên!")
+            return False
+        
         email = self.email_entry.get().strip()
-        phone = self.phone_entry.get().strip()
-        address = self.address_entry.get().strip()
-        password = self.password_entry.get()
-        confirm_password = self.confirm_password_entry.get()
-        
-        # Validate
-        if not all([full_name, username, email, password, confirm_password]):
-            messagebox.showerror("Lỗi", "Vui lòng điền đầy đủ các trường bắt buộc (*)!")
-            return
-        
-        if len(username) < 4:
-            messagebox.showerror("Lỗi", "Tên đăng nhập phải có ít nhất 4 ký tự!")
-            return
+        if not email:
+            messagebox.showerror("Lỗi", "Vui lòng nhập email!")
+            return False
         
         if not self.validate_email(email):
             messagebox.showerror("Lỗi", "Email không hợp lệ!")
-            return
+            return False
         
-        if phone and not self.validate_phone(phone):
-            messagebox.showerror("Lỗi", "Số điện thoại không hợp lệ!\nĐịnh dạng: 0xxxxxxxxx")
-            return
+        phone = self.phone_entry.get().strip()
+        if not phone:
+            messagebox.showerror("Lỗi", "Vui lòng nhập số điện thoại!")
+            return False
+        
+        if not self.validate_phone(phone):
+            messagebox.showerror("Lỗi", "Số điện thoại không hợp lệ! (10 số, bắt đầu bằng 0)")
+            return False
+        
+        password = self.password_entry.get()
+        if not password:
+            messagebox.showerror("Lỗi", "Vui lòng nhập mật khẩu!")
+            return False
         
         if len(password) < 6:
             messagebox.showerror("Lỗi", "Mật khẩu phải có ít nhất 6 ký tự!")
-            return
+            return False
         
-        if password != confirm_password:
+        confirm = self.confirm_entry.get()
+        if password != confirm:
             messagebox.showerror("Lỗi", "Mật khẩu xác nhận không khớp!")
+            return False
+        
+        return True
+    
+    def register(self):
+        """Xử lý đăng ký"""
+        if not self.validate_form():
             return
         
-        if not self.terms_var.get():
-            messagebox.showerror("Lỗi", "Bạn phải đồng ý với Điều khoản sử dụng!")
+        # Check if email exists
+        email = self.email_entry.get().strip()
+        if self.auth_manager and self.auth_manager.check_email_exists(email):
+            messagebox.showerror("Lỗi", "Email đã được sử dụng!")
             return
         
-        # Check if username exists
-        existing_user = self.db.get_user_by_username(username)
-        if existing_user:
-            messagebox.showerror("Lỗi", "Tên đăng nhập đã tồn tại!")
-            return
-        
-        # Create user
+        # Register user
         try:
-            user_id = self.db.create_user(
-                username=username,
-                password=password,
+            user_id = self.auth_manager.register_user(
+                name=self.name_entry.get().strip(),
                 email=email,
-                full_name=full_name,
-                phone=phone,
-                address=address,
-                role='customer'
+                number=self.phone_entry.get().strip(),
+                password=self.password_entry.get(),
+                address=self.address_text.get("1.0", tk.END).strip()
             )
             
             if user_id:
-                messagebox.showinfo("Thành công", 
-                    f"Đăng ký thành công!\n\nChào mừng {full_name} đến với Music Store!")
-                
+                messagebox.showinfo(
+                    "Thành công", 
+                    "Đăng ký thành công!\nBạn có thể đăng nhập ngay."
+                )
                 if self.on_register_success:
-                    user = self.db.get_user_by_id(user_id)
-                    self.on_register_success(user)
-                
+                    self.on_register_success()
                 self.root.destroy()
             else:
-                messagebox.showerror("Lỗi", "Không thể tạo tài khoản. Vui lòng thử lại!")
-        
+                messagebox.showerror("Lỗi", "Không thể đăng ký. Vui lòng thử lại!")
         except Exception as e:
-            messagebox.showerror("Lỗi", f"Đã xảy ra lỗi: {str(e)}")
+            messagebox.showerror("Lỗi", f"Lỗi đăng ký: {e}")
     
     def back_to_login(self):
         """Quay lại màn hình đăng nhập"""
         self.root.destroy()
 
 def main():
+    """Test register window"""
+    from database.db_manager import AuthManager
+    
     root = tk.Tk()
-    app = RegisterWindow(root)
+    auth = AuthManager()
+    
+    def on_success():
+        print("Registration successful!")
+    
+    RegisterWindow(root, auth, on_success)
     root.mainloop()
 
 if __name__ == "__main__":
